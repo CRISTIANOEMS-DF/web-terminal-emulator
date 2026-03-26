@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>WebConsole Terminal</title>
+
+    <link rel="stylesheet" href="../BACKEND/CSS/terminal.css" />
+
+    <style>
+      body {
+        margin: 0;
+        padding: 0;
+        background: #000;
+        height: 100vh;
+        overflow: hidden;
+        font-family: "Courier New", Courier, monospace;
+      }
+
+      /* O terminal vai ocupar 100% dessa div */
+      #terminal-container {
+        width: 100%;
+        height: 100%;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div id="terminal-container"></div>
+
+    <script src="../BACKEND/CSS/console.theme.js"></script>
+    <script src="../BACKEND/CSS/console.table.js"></script>
+
+    <script src="../BACKEND/CSS/console.renderer.js"></script>
+    <script src="../BACKEND/CSS/console.keyboard.js"></script>
+
+    <script src="../BACKEND/CORE/console.parser.js"></script>
+    <script src="../BACKEND/CORE/console.history.js"></script>
+
+    <script src="../BACKEND/JS/COMMANDS/console.registry.js"></script>
+    <script src="../BACKEND/JS/COMMANDS/console.database.js"></script>
+    <script src="../BACKEND/JS/COMMANDS/console.commands.js"></script>
+    <script src="../BACKEND/JS/COMMANDS/console.builtins.js"></script>
+
+    <script src="../BACKEND/CORE/console.engine.js"></script>
+
+    <script src="./JS/console.bootstrap.js"></script>
+
+    <script>
+      /**
+       * Inicialização do WebConsole Terminal
+       */
+      const terminal = new WebConsole({
+        containerId: "terminal-container",
+        promptSymbol: "user@machine:~$ ",
+        theme: "dark",
+        maxHistory: 500,
+        locale: "pt-BR",
+        motd: true, // Mostra a mensagem de boas vindas padrão
+        debug: false,
+      });
+
+      if (terminal.keyboard && terminal.renderer) {
+        terminal.keyboard.connect(terminal.renderer);
+      }
+
+      // Assim que estiver pronto, limpa a tela e foca no cursor
+      terminal.events.on("ready", () => {
+        terminal.clear();
+        terminal.focus();
+      });
+
+      // Disparado quando o DOM do terminal é construído
+      terminal.events.on("ready", (data) => {
+        console.log("WebConsole pronto!", data);
+
+        // Mensagens extras ao iniciar
+        terminal.print("System initialized", "success");
+        terminal.print("Ready for commands", "info");
+
+        // Foca automaticamente no terminal para o usuário já sair digitando
+        terminal.focus();
+      });
+
+      // Logs de debug para o console do navegador
+      terminal.events.on("error", (error) =>
+        console.error("Terminal error:", error),
+      );
+      terminal.events.on("clear", () => console.log("Terminal cleared"));
+      terminal.events.on("themeChange", (data) =>
+        console.log("Theme changed to:", data.theme),
+      );
+
+      // Expõe a variável globalmente
+      window.terminal = terminal;
+    </script>
+  </body>
+</html>

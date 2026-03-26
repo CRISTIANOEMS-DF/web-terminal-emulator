@@ -1,0 +1,1089 @@
+/**
+ * @file        terminal.css
+ * @description Complete CSS System for Terminal UI
+ *
+ * This file provides:
+ * - CSS Variables mapped to ConsoleTheme palettes
+ * - Complete styling for all terminal components
+ * - Integration with ConsoleTheme dynamic theming
+ * - Responsive design and accessibility
+ * - Component-specific styles (terminal, keyboard, table, renderer)
+ *
+ * Used by:
+ * - console.renderer.js (FRONTEND/CSS) - Terminal rendering
+ * - console.keyboard.js (FRONTEND/CSS) - Keyboard UI
+ * - console.table.js (FRONTEND/CSS) - Table rendering
+ * - console.theme.js (BACKEND/CSS) - Theme management
+ * - console.bootstrap.js (FRONTEND/JS) - App initialization
+ *
+ * @version 3.0.0
+ * @license MIT
+ */
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   1. ROOT CSS VARIABLES - Color Palette (from ConsoleTheme)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* Color Palette - Synced with ConsoleTheme */
+  --console-bg: #0d0d0d;
+  --console-surface: #141414;
+  --console-border: #1f1f1f;
+  --console-text: #c8c8c8;
+  --console-prompt: #00e676;
+  --console-cursor: #00e676;
+  --console-output: #c8c8c8;
+  --console-info: #40c4ff;
+  --console-warn: #ffd740;
+  --console-error: #ff5252;
+  --console-success: #69ff47;
+  --console-muted: #4a4a4a;
+  --console-selection: #00e67633;
+  --console-scrollbar: #2a2a2a;
+
+  /* Typography */
+  --console-font: "Courier New", monospace;
+  --console-font-size: 14px;
+  --console-line-height: 1.5;
+  --console-font-weight-normal: 400;
+  --console-font-weight-bold: 700;
+
+  /* Spacing */
+  --console-spacing-xs: 2px;
+  --console-spacing-sm: 4px;
+  --console-spacing-md: 8px;
+  --console-spacing-lg: 12px;
+  --console-spacing-xl: 16px;
+  --console-spacing-2xl: 24px;
+
+  /* Border Radius */
+  --console-radius-sm: 2px;
+  --console-radius-md: 4px;
+  --console-radius-lg: 8px;
+
+  /* Shadow & Effects */
+  --console-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.5);
+  --console-shadow-md: 0 2px 4px rgba(0, 0, 0, 0.6);
+  --console-shadow-lg: 0 4px 8px rgba(0, 0, 0, 0.7);
+
+  /* Z-Index Layers */
+  --console-z-base: 1;
+  --console-z-dropdown: 100;
+  --console-z-modal: 500;
+  --console-z-tooltip: 1000;
+
+  /* Transitions */
+  --console-transition-fast: 100ms ease-in-out;
+  --console-transition-normal: 200ms ease-in-out;
+  --console-transition-slow: 300ms ease-in-out;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   2. RESET & BASE STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 100%;
+  height: 100%;
+  background-color: var(--console-bg);
+  color: var(--console-text);
+  font-family: var(--console-font);
+  font-size: var(--console-font-size);
+  line-height: var(--console-line-height);
+  overflow: hidden;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   3. TYPOGRAPHY
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--console-font);
+  font-weight: var(--console-font-weight-bold);
+  color: var(--console-text);
+  margin: var(--console-spacing-md) 0;
+}
+
+p {
+  margin: var(--console-spacing-md) 0;
+}
+
+code {
+  background-color: var(--console-surface);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-sm);
+  padding: var(--console-spacing-xs) var(--console-spacing-sm);
+  font-family: var(--console-font);
+  color: var(--console-prompt);
+}
+
+pre {
+  background-color: var(--console-surface);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-md);
+  padding: var(--console-spacing-md);
+  overflow-x: auto;
+  margin: var(--console-spacing-md) 0;
+}
+
+pre code {
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   4. SCROLLBAR STYLING
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: var(--console-bg);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--console-scrollbar);
+  border-radius: var(--console-radius-sm);
+  border: 1px solid var(--console-border);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--console-muted);
+}
+
+/* Firefox scrollbar */
+* {
+  scrollbar-color: var(--console-scrollbar) var(--console-bg);
+  scrollbar-width: thin;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   5. TERMINAL CONTAINER - Main Terminal UI
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+#terminal-container,
+.console-terminal {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: var(--console-bg);
+  border: 1px solid var(--console-border);
+  overflow: hidden;
+}
+
+.console-terminal-header {
+  background-color: var(--console-surface);
+  border-bottom: 1px solid var(--console-border);
+  padding: var(--console-spacing-md);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 40px;
+  z-index: var(--console-z-base);
+}
+
+.console-terminal-title {
+  font-weight: var(--console-font-weight-bold);
+  color: var(--console-prompt);
+  font-size: 14px;
+}
+
+.console-terminal-body {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+  position: relative;
+}
+
+.console-terminal-output {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: var(--console-spacing-md);
+  background-color: var(--console-bg);
+  border-right: 1px solid var(--console-border);
+}
+
+.console-terminal-input {
+  background-color: var(--console-surface);
+  border-top: 1px solid var(--console-border);
+  padding: var(--console-spacing-md);
+  min-height: 40px;
+  display: flex;
+  align-items: center;
+  z-index: var(--console-z-base);
+}
+
+.console-terminal-footer {
+  background-color: var(--console-surface);
+  border-top: 1px solid var(--console-border);
+  padding: var(--console-spacing-sm) var(--console-spacing-md);
+  font-size: 12px;
+  color: var(--console-muted);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  min-height: 25px;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   6. COMMAND LINE STYLING
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.console-prompt {
+  color: var(--console-prompt);
+  font-weight: var(--console-font-weight-bold);
+  margin-right: var(--console-spacing-sm);
+  user-select: none;
+}
+
+.console-input-line {
+  display: flex;
+  align-items: center;
+  margin: var(--console-spacing-sm) 0;
+  font-family: var(--console-font);
+}
+
+.console-input-field {
+  flex: 1;
+  background-color: var(--console-bg);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-sm);
+  padding: var(--console-spacing-sm) var(--console-spacing-md);
+  color: var(--console-text);
+  font-family: var(--console-font);
+  font-size: var(--console-font-size);
+  outline: none;
+  transition: border-color var(--console-transition-fast);
+}
+
+.console-input-field:focus {
+  border-color: var(--console-prompt);
+  box-shadow: 0 0 0 2px rgba(0, 230, 118, 0.1);
+}
+
+.console-input-field::placeholder {
+  color: var(--console-muted);
+}
+
+.console-cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1em;
+  background-color: var(--console-cursor);
+  margin-left: var(--console-spacing-xs);
+  animation: cursor-blink 1s infinite;
+}
+
+@keyframes cursor-blink {
+  0%,
+  49% {
+    opacity: 1;
+  }
+  50%,
+  100% {
+    opacity: 0;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   7. OUTPUT STYLING - Command Output Messages
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.console-output-line {
+  margin: var(--console-spacing-xs) 0;
+  word-wrap: break-word;
+  white-space: pre-wrap;
+  user-select: text;
+  color: var(--console-output);
+}
+
+.console-output-command {
+  color: var(--console-output);
+  font-weight: var(--console-font-weight-bold);
+  margin: var(--console-spacing-sm) 0;
+}
+
+.console-output-info {
+  color: var(--console-info);
+  margin: var(--console-spacing-xs) 0;
+}
+
+.console-output-warn {
+  color: var(--console-warn);
+  margin: var(--console-spacing-xs) 0;
+}
+
+.console-output-error {
+  color: var(--console-error);
+  margin: var(--console-spacing-xs) 0;
+  font-weight: var(--console-font-weight-bold);
+}
+
+.console-output-success {
+  color: var(--console-success);
+  margin: var(--console-spacing-xs) 0;
+}
+
+.console-output-muted {
+  color: var(--console-muted);
+  margin: var(--console-spacing-xs) 0;
+}
+
+.console-output-selection {
+  background-color: var(--console-selection);
+  color: var(--console-text);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   8. KEYBOARD STYLING - Virtual Keyboard UI
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.console-keyboard {
+  background-color: var(--console-surface);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-md);
+  padding: var(--console-spacing-md);
+  margin: var(--console-spacing-md);
+  box-shadow: var(--console-shadow-md);
+}
+
+.console-keyboard-row {
+  display: flex;
+  gap: var(--console-spacing-sm);
+  margin-bottom: var(--console-spacing-sm);
+  flex-wrap: wrap;
+}
+
+.console-key {
+  min-width: 30px;
+  padding: var(--console-spacing-sm) var(--console-spacing-md);
+  background-color: var(--console-bg);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-sm);
+  color: var(--console-text);
+  font-family: var(--console-font);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--console-transition-fast);
+  user-select: none;
+  text-align: center;
+  white-space: nowrap;
+}
+
+.console-key:hover {
+  background-color: var(--console-border);
+  border-color: var(--console-prompt);
+}
+
+.console-key:active,
+.console-key.active {
+  background-color: var(--console-prompt);
+  color: var(--console-bg);
+  border-color: var(--console-prompt);
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+
+.console-key.special {
+  background-color: var(--console-info);
+  color: var(--console-bg);
+  border-color: var(--console-info);
+  font-weight: var(--console-font-weight-bold);
+}
+
+.console-key.special:hover {
+  background-color: var(--console-warn);
+  border-color: var(--console-warn);
+}
+
+.console-key.disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.console-key.disabled:hover {
+  background-color: var(--console-bg);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   9. TABLE STYLING - Data Tables
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.console-table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: var(--console-bg);
+  border: 1px solid var(--console-border);
+  margin: var(--console-spacing-md) 0;
+  border-radius: var(--console-radius-md);
+  overflow: hidden;
+}
+
+.console-table thead {
+  background-color: var(--console-surface);
+  border-bottom: 2px solid var(--console-border);
+}
+
+.console-table th {
+  padding: var(--console-spacing-md);
+  text-align: left;
+  font-weight: var(--console-font-weight-bold);
+  color: var(--console-prompt);
+  border-right: 1px solid var(--console-border);
+  user-select: none;
+}
+
+.console-table th:last-child {
+  border-right: none;
+}
+
+.console-table tbody tr {
+  border-bottom: 1px solid var(--console-border);
+  transition: background-color var(--console-transition-fast);
+}
+
+.console-table tbody tr:hover {
+  background-color: var(--console-surface);
+}
+
+.console-table tbody tr:last-child {
+  border-bottom: none;
+}
+
+.console-table td {
+  padding: var(--console-spacing-md);
+  color: var(--console-text);
+  border-right: 1px solid var(--console-border);
+  word-wrap: break-word;
+}
+
+.console-table td:last-child {
+  border-right: none;
+}
+
+.console-table-cell-info {
+  color: var(--console-info);
+}
+
+.console-table-cell-warn {
+  color: var(--console-warn);
+}
+
+.console-table-cell-error {
+  color: var(--console-error);
+}
+
+.console-table-cell-success {
+  color: var(--console-success);
+}
+
+.console-table-cell-muted {
+  color: var(--console-muted);
+}
+
+.console-table-cell-highlighted {
+  background-color: var(--console-selection);
+  font-weight: var(--console-font-weight-bold);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   10. RENDERER STYLING - Text Rendering Components
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.console-renderer {
+  display: inline-block;
+  font-family: var(--console-font);
+  color: var(--console-text);
+  line-height: var(--console-line-height);
+}
+
+.console-renderer-line {
+  display: block;
+  margin: var(--console-spacing-xs) 0;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.console-renderer-token {
+  display: inline;
+  font-family: var(--console-font);
+}
+
+.console-renderer-token-keyword {
+  color: var(--console-warn);
+  font-weight: var(--console-font-weight-bold);
+}
+
+.console-renderer-token-string {
+  color: var(--console-success);
+}
+
+.console-renderer-token-number {
+  color: var(--console-info);
+}
+
+.console-renderer-token-comment {
+  color: var(--console-muted);
+  font-style: italic;
+}
+
+.console-renderer-token-operator {
+  color: var(--console-warn);
+}
+
+.console-renderer-token-function {
+  color: var(--console-prompt);
+  font-weight: var(--console-font-weight-bold);
+}
+
+.console-renderer-token-variable {
+  color: var(--console-info);
+}
+
+.console-renderer-token-error {
+  color: var(--console-error);
+  text-decoration: underline;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   11. BUTTONS & CONTROLS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+button,
+input[type="button"],
+input[type="submit"],
+input[type="reset"] {
+  background-color: var(--console-prompt);
+  color: var(--console-bg);
+  border: 1px solid var(--console-prompt);
+  border-radius: var(--console-radius-md);
+  padding: var(--console-spacing-sm) var(--console-spacing-md);
+  font-family: var(--console-font);
+  font-size: var(--console-font-size);
+  cursor: pointer;
+  transition: all var(--console-transition-normal);
+  font-weight: var(--console-font-weight-bold);
+}
+
+button:hover,
+input[type="button"]:hover,
+input[type="submit"]:hover {
+  background-color: var(--console-success);
+  border-color: var(--console-success);
+  box-shadow: var(--console-shadow-md);
+}
+
+button:active,
+input[type="button"]:active,
+input[type="submit"]:active {
+  transform: scale(0.98);
+}
+
+button:disabled,
+input[type="button"]:disabled,
+input[type="submit"]:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+button.secondary {
+  background-color: var(--console-surface);
+  color: var(--console-text);
+  border-color: var(--console-border);
+}
+
+button.secondary:hover {
+  background-color: var(--console-border);
+  border-color: var(--console-prompt);
+}
+
+button.danger {
+  background-color: var(--console-error);
+  border-color: var(--console-error);
+}
+
+button.danger:hover {
+  background-color: #ff6464;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   12. FORMS & INPUTS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+input[type="text"],
+input[type="password"],
+input[type="email"],
+input[type="number"],
+input[type="search"],
+textarea,
+select {
+  background-color: var(--console-bg);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-sm);
+  padding: var(--console-spacing-sm) var(--console-spacing-md);
+  color: var(--console-text);
+  font-family: var(--console-font);
+  font-size: var(--console-font-size);
+  transition: border-color var(--console-transition-fast);
+}
+
+input:focus,
+textarea:focus,
+select:focus {
+  border-color: var(--console-prompt);
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(0, 230, 118, 0.1);
+}
+
+input::placeholder {
+  color: var(--console-muted);
+}
+
+textarea {
+  resize: vertical;
+  min-height: 100px;
+  font-family: var(--console-font);
+}
+
+select {
+  cursor: pointer;
+}
+
+label {
+  display: block;
+  margin-bottom: var(--console-spacing-sm);
+  color: var(--console-text);
+  font-weight: var(--console-font-weight-bold);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   13. ALERTS & NOTIFICATIONS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.console-alert {
+  padding: var(--console-spacing-md);
+  margin: var(--console-spacing-md) 0;
+  border-left: 4px solid;
+  border-radius: var(--console-radius-md);
+  background-color: var(--console-surface);
+}
+
+.console-alert-info {
+  border-color: var(--console-info);
+  color: var(--console-info);
+}
+
+.console-alert-warn {
+  border-color: var(--console-warn);
+  color: var(--console-warn);
+}
+
+.console-alert-error {
+  border-color: var(--console-error);
+  color: var(--console-error);
+}
+
+.console-alert-success {
+  border-color: var(--console-success);
+  color: var(--console-success);
+}
+
+.console-notification {
+  position: fixed;
+  bottom: var(--console-spacing-md);
+  right: var(--console-spacing-md);
+  padding: var(--console-spacing-md);
+  border-radius: var(--console-radius-md);
+  box-shadow: var(--console-shadow-lg);
+  z-index: var(--console-z-tooltip);
+  animation: notification-slide-in var(--console-transition-normal) ease-out;
+}
+
+@keyframes notification-slide-in {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   14. MODALS & DIALOGS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.console-modal-overlay {
+  display: none;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.7);
+  z-index: calc(var(--console-z-modal) - 1);
+}
+
+.console-modal-overlay.active {
+  display: block;
+}
+
+.console-modal {
+  display: none;
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background-color: var(--console-surface);
+  border: 1px solid var(--console-border);
+  border-radius: var(--console-radius-lg);
+  box-shadow: var(--console-shadow-lg);
+  z-index: var(--console-z-modal);
+  max-width: 600px;
+  max-height: 80vh;
+  overflow: hidden;
+  animation: modal-slide-in var(--console-transition-normal) ease-out;
+}
+
+.console-modal.active {
+  display: flex;
+  flex-direction: column;
+}
+
+@keyframes modal-slide-in {
+  from {
+    transform: translate(-50%, -60%);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%);
+    opacity: 1;
+  }
+}
+
+.console-modal-header {
+  padding: var(--console-spacing-md);
+  border-bottom: 1px solid var(--console-border);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.console-modal-title {
+  font-weight: var(--console-font-weight-bold);
+  color: var(--console-prompt);
+}
+
+.console-modal-close {
+  background: none;
+  border: none;
+  color: var(--console-muted);
+  cursor: pointer;
+  font-size: 20px;
+  padding: 0;
+  transition: color var(--console-transition-fast);
+}
+
+.console-modal-close:hover {
+  color: var(--console-error);
+}
+
+.console-modal-body {
+  flex: 1;
+  padding: var(--console-spacing-md);
+  overflow-y: auto;
+}
+
+.console-modal-footer {
+  padding: var(--console-spacing-md);
+  border-top: 1px solid var(--console-border);
+  display: flex;
+  gap: var(--console-spacing-md);
+  justify-content: flex-end;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   15. UTILITY CLASSES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.console-hidden {
+  display: none !important;
+}
+
+.console-visible {
+  display: block !important;
+}
+
+.console-flex {
+  display: flex;
+}
+
+.console-flex-col {
+  flex-direction: column;
+}
+
+.console-flex-row {
+  flex-direction: row;
+}
+
+.console-flex-center {
+  justify-content: center;
+  align-items: center;
+}
+
+.console-gap-sm {
+  gap: var(--console-spacing-sm);
+}
+
+.console-gap-md {
+  gap: var(--console-spacing-md);
+}
+
+.console-gap-lg {
+  gap: var(--console-spacing-lg);
+}
+
+.console-p-sm {
+  padding: var(--console-spacing-sm);
+}
+
+.console-p-md {
+  padding: var(--console-spacing-md);
+}
+
+.console-p-lg {
+  padding: var(--console-spacing-lg);
+}
+
+.console-m-sm {
+  margin: var(--console-spacing-sm);
+}
+
+.console-m-md {
+  margin: var(--console-spacing-md);
+}
+
+.console-m-lg {
+  margin: var(--console-spacing-lg);
+}
+
+.console-mt-sm {
+  margin-top: var(--console-spacing-sm);
+}
+
+.console-mt-md {
+  margin-top: var(--console-spacing-md);
+}
+
+.console-mt-lg {
+  margin-top: var(--console-spacing-lg);
+}
+
+.console-mb-sm {
+  margin-bottom: var(--console-spacing-sm);
+}
+
+.console-mb-md {
+  margin-bottom: var(--console-spacing-md);
+}
+
+.console-mb-lg {
+  margin-bottom: var(--console-spacing-lg);
+}
+
+.console-text-center {
+  text-align: center;
+}
+
+.console-text-left {
+  text-align: left;
+}
+
+.console-text-right {
+  text-align: right;
+}
+
+.console-text-bold {
+  font-weight: var(--console-font-weight-bold);
+}
+
+.console-text-muted {
+  color: var(--console-muted);
+}
+
+.console-text-info {
+  color: var(--console-info);
+}
+
+.console-text-warn {
+  color: var(--console-warn);
+}
+
+.console-text-error {
+  color: var(--console-error);
+}
+
+.console-text-success {
+  color: var(--console-success);
+}
+
+.console-text-prompt {
+  color: var(--console-prompt);
+}
+
+.console-text-mono {
+  font-family: var(--console-font);
+}
+
+.console-opacity-50 {
+  opacity: 0.5;
+}
+
+.console-opacity-75 {
+  opacity: 0.75;
+}
+
+.console-cursor-pointer {
+  cursor: pointer;
+}
+
+.console-cursor-not-allowed {
+  cursor: not-allowed;
+}
+
+.console-user-select-none {
+  user-select: none;
+}
+
+.console-user-select-text {
+  user-select: text;
+}
+
+.console-no-overflow {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   16. RESPONSIVE DESIGN
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  :root {
+    --console-font-size: 13px;
+    --console-spacing-md: 6px;
+    --console-spacing-lg: 10px;
+  }
+
+  .console-modal {
+    max-width: 90vw;
+  }
+
+  .console-terminal-body {
+    flex-direction: column;
+  }
+
+  .console-terminal-output {
+    border-right: none;
+    border-bottom: 1px solid var(--console-border);
+  }
+}
+
+@media (max-width: 480px) {
+  :root {
+    --console-font-size: 12px;
+    --console-spacing-md: 4px;
+    --console-spacing-lg: 8px;
+  }
+
+  button,
+  input[type="button"],
+  input[type="submit"] {
+    width: 100%;
+  }
+
+  .console-table {
+    font-size: 11px;
+  }
+
+  .console-table th,
+  .console-table td {
+    padding: var(--console-spacing-sm);
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   17. PRINT STYLES
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media print {
+  body {
+    background-color: white;
+    color: black;
+  }
+
+  .console-terminal,
+  .console-modal-overlay,
+  .console-notification {
+    display: none;
+  }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   18. DARK MODE & THEME APPLICATION
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Ensure theme is applied properly */
+[data-theme] {
+  transition:
+    background-color var(--console-transition-normal),
+    color var(--console-transition-normal);
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: more) {
+  :root {
+    --console-border: #ffffff;
+    --console-text: #ffffff;
+  }
+
+  .console-input-field {
+    border-width: 2px;
+  }
+
+  button {
+    border-width: 2px;
+  }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation: none !important;
+    transition: none !important;
+  }
+}
