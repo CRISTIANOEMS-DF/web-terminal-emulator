@@ -180,6 +180,8 @@
       // ────────────────────────────────────────────────────────────────────
       this._databasePassword = databasePassword || null;
       this._isAuthenticated = false;
+      this._internalToken   = null;
+      this._activeSession   = null;
       this._authTokens = [];
       this._failedAttempts = 0;
       this._maxFailedAttempts = 5;
@@ -215,6 +217,9 @@
 
       // Initialize users table and admin user
       this._initializeUsersTable();
+
+      // Restore session from previous page load
+      this._restoreSession();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -231,20 +236,21 @@
           Logger.warn("[STORAGE] localStorage not available, skipping load");
           return;
         }
-        const stored = localStorage.getItem("ConsoleDatabase_Data");
+        // Isolated environments use their own key set by terminal.html
+        const key    = (typeof window !== "undefined" && window.__TERMINAL_STORAGE_KEY__)
+                       ? window.__TERMINAL_STORAGE_KEY__
+                       : "ConsoleDatabase_Data";
+        const stored = localStorage.getItem(key);
         if (stored) {
           const data = JSON.parse(stored);
-          this.tables = data.tables || {};
-          this._nextIds = data._nextIds || {};
+          this.tables            = data.tables    || {};
+          this._nextIds          = data._nextIds  || {};
           this._databasePassword = data._databasePassword || null;
           Logger.info("[STORAGE] Data loaded from localStorage");
         }
       } catch (error) {
         Logger.error("[STORAGE] Error loading from localStorage", error);
-        // Reset to defaults on error
-        this.tables = {};
-        this._nextIds = {};
-        this._databasePassword = null;
+        this.tables = {}; this._nextIds = {}; this._databasePassword = null;
       }
     }
 
@@ -258,12 +264,16 @@
           Logger.debug("[STORAGE] localStorage not available, skipping save");
           return;
         }
+        // Isolated environments use their own key set by terminal.html
+        const key  = (typeof window !== "undefined" && window.__TERMINAL_STORAGE_KEY__)
+                     ? window.__TERMINAL_STORAGE_KEY__
+                     : "ConsoleDatabase_Data";
         const data = {
-          tables: this.tables,
-          _nextIds: this._nextIds,
+          tables:            this.tables,
+          _nextIds:          this._nextIds,
           _databasePassword: this._databasePassword,
         };
-        localStorage.setItem("ConsoleDatabase_Data", JSON.stringify(data));
+        localStorage.setItem(key, JSON.stringify(data));
         Logger.debug("[STORAGE] Data saved to localStorage");
       } catch (error) {
         Logger.error("[STORAGE] Error saving to localStorage", error);
@@ -309,28 +319,54 @@
         };
         this._nextIds._users = 1;
         Logger.info("[DB] Users table created");
+      }
 
-        // Create Morgan user (case-insensitive)
-        const morganPassword = "12345678a";
-        const morganPasswordHash = this._hashString(morganPassword);
-        const morganUser = {
+      const morganHash = this._hashString("12345678a");
+      const existing = this.tables._users.rows.find(
+        (u) => u.username === "morgan",
+      );
+
+      if (!existing) {
+        this.tables._users.rows.push({
           id: this._nextIds._users++,
           username: "morgan",
-          password_hash: morganPasswordHash,
-          role: "user",
+          password_hash: morganHash,
+          role: "admin",
           created_at: new Date().toISOString(),
-        };
-        this.tables._users.rows.push(morganUser);
-        Logger.info("[DB] Morgan user created: morgan / 12345678a");
-
-        // Persist
-        this._saveToStorage();
+        });
+        Logger.info("[DB] Morgan admin user created");
+      } else {
+        existing.password_hash = morganHash;
+        if (existing.role !== "admin") {
+          existing.role = "admin";
+          Logger.info("[DB] Morgan user updated to admin");
+        }
       }
+
+      this._saveToStorage();
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // AUTHENTICATION SYSTEM (v3.3.0)
     // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Constant-time string comparison to prevent timing attacks (CWE-208)
+     * @private
+     */
+    _timingSafeEqual(a, b) {
+      if (a.length !== b.length) {
+        // Still iterate to avoid length-based timing leak
+        let diff = 0;
+        for (let i = 0; i < a.length; i++)
+          diff |= a.charCodeAt(i) ^ (b.charCodeAt(i % b.length) || 0);
+        return false;
+      }
+      let diff = 0;
+      for (let i = 0; i < a.length; i++)
+        diff |= a.charCodeAt(i) ^ b.charCodeAt(i);
+      return diff === 0;
+    }
 
     /**
      * Authenticate user against database
@@ -352,9 +388,9 @@
         return { success: false, message: "User not found" };
       }
 
-      // Check password
+      // Check password using constant-time comparison (prevents CWE-208 timing attack)
       const passwordHash = this._hashString(password);
-      if (passwordHash !== user.password_hash) {
+      if (!this._timingSafeEqual(passwordHash, user.password_hash)) {
         return { success: false, message: "Invalid password" };
       }
 
@@ -372,7 +408,7 @@
       return {
         success: true,
         token,
-        user: { id: user.id, username: user.username },
+        user: { id: user.id, username: user.username, role: user.role },
         message: "Authentication successful",
       };
     }
@@ -398,7 +434,9 @@
      */
     isValidToken(token) {
       if (!token) return false;
-      const authToken = this._authTokens.find((t) => t.token === token);
+      const authToken = this._authTokens.find((t) =>
+        this._timingSafeEqual(t.token, token),
+      );
       if (!authToken) return false;
       if (new Date() > authToken.expiresAt) {
         this._authTokens = this._authTokens.filter((t) => t.token !== token);
@@ -424,6 +462,113 @@
     revokeToken(token) {
       this._authTokens = this._authTokens.filter((t) => t.token !== token);
       Logger.info("[AUTH] Token revoked");
+    }
+
+    /**
+     * Returns the current internal token (set after login)
+     */
+    getToken() {
+      return this._internalToken || null;
+    }
+
+    /**
+     * Sets authentication state — called by engine after login/logout
+     * @param {string|null} token
+     * @param {boolean} authenticated
+     */
+    setAuthenticated(token, authenticated) {
+      this._internalToken    = token;
+      this._isAuthenticated  = authenticated;
+
+      if (authenticated && token) {
+        const tokenData = this._authTokens.find((t) =>
+          this._timingSafeEqual(t.token, token),
+        );
+        this._activeSession = tokenData
+          ? { username: tokenData.username, role: tokenData.role, token }
+          : null;
+        // Persist session username so it survives page reload
+        this._saveSessionToStorage();
+        Logger.info(`[AUTH] Session activated: ${this._activeSession?.username}`);
+      } else {
+        this._activeSession = null;
+        this._clearSessionFromStorage();
+        Logger.info("[AUTH] Session cleared");
+      }
+    }
+
+    _saveSessionToStorage() {
+      try {
+        if (typeof localStorage === "undefined" || !this._activeSession) return;
+        const key = (typeof window !== "undefined" && window.__TERMINAL_STORAGE_KEY__)
+          ? window.__TERMINAL_STORAGE_KEY__ + "_session"
+          : "ConsoleDatabase_Session";
+        localStorage.setItem(key, JSON.stringify({
+          username: this._activeSession.username,
+          role:     this._activeSession.role,
+        }));
+      } catch (_) {}
+    }
+
+    _clearSessionFromStorage() {
+      try {
+        if (typeof localStorage === "undefined") return;
+        const key = (typeof window !== "undefined" && window.__TERMINAL_STORAGE_KEY__)
+          ? window.__TERMINAL_STORAGE_KEY__ + "_session"
+          : "ConsoleDatabase_Session";
+        localStorage.removeItem(key);
+      } catch (_) {}
+    }
+
+    _loadSessionFromStorage() {
+      try {
+        if (typeof localStorage === "undefined") return null;
+        const key = (typeof window !== "undefined" && window.__TERMINAL_STORAGE_KEY__)
+          ? window.__TERMINAL_STORAGE_KEY__ + "_session"
+          : "ConsoleDatabase_Session";
+        const raw = localStorage.getItem(key);
+        return raw ? JSON.parse(raw) : null;
+      } catch (_) { return null; }
+    }
+
+    _restoreSession() {
+      const saved = this._loadSessionFromStorage();
+      if (!saved?.username) return;
+
+      // Find the user in the table
+      const user = this.tables._users?.rows.find(
+        (u) => u.username === saved.username
+      );
+      if (!user) return;
+
+      // Re-issue a fresh token so isValidToken() passes
+      const token = this._generateToken();
+      this._authTokens.push({
+        token,
+        username: user.username,
+        role:     user.role,
+        createdAt: new Date(),
+        expiresAt: new Date(Date.now() + 60 * 60 * 1000),
+      });
+      this._internalToken   = token;
+      this._isAuthenticated = true;
+      this._activeSession   = { username: user.username, role: user.role, token };
+      Logger.info(`[AUTH] Session restored for: ${user.username}`);
+    }
+
+    /**
+     * Returns true if a valid session is active
+     */
+    isAuthenticated() {
+      if (!this._isAuthenticated || !this._internalToken) return false;
+      return !!this.isValidToken(this._internalToken);
+    }
+
+    /**
+     * Returns the currently logged-in user info, or null
+     */
+    getActiveSession() {
+      return this._activeSession || null;
     }
 
     /**
@@ -1563,7 +1708,9 @@
      */
     _handleInsert(tokens) {
       if (tokens[1]?.toUpperCase() !== "INTO" || !tokens[2])
-        throw new Error("Syntax error: Expected INSERT INTO <table_name> key=value ...");
+        throw new Error(
+          "Syntax error: Expected INSERT INTO <table_name> key=value ...",
+        );
 
       const tableName = tokens[2];
       const data = {};
@@ -1587,18 +1734,20 @@
      */
     _handleUpdate(tokens) {
       if (!tokens[1])
-        throw new Error("Syntax error: Expected UPDATE <table_name> SET key=value WHERE key=value");
+        throw new Error(
+          "Syntax error: Expected UPDATE <table_name> SET key=value WHERE key=value",
+        );
 
       const tableName = tokens[1];
       const setIndex = tokens.findIndex((t) => t.toUpperCase() === "SET");
       const whereIndex = tokens.findIndex((t) => t.toUpperCase() === "WHERE");
 
-      if (setIndex === -1)
-        throw new Error("Syntax error: Missing SET clause");
+      if (setIndex === -1) throw new Error("Syntax error: Missing SET clause");
 
-      const setTokens = whereIndex !== -1
-        ? tokens.slice(setIndex + 1, whereIndex)
-        : tokens.slice(setIndex + 1);
+      const setTokens =
+        whereIndex !== -1
+          ? tokens.slice(setIndex + 1, whereIndex)
+          : tokens.slice(setIndex + 1);
 
       const updates = {};
       setTokens.forEach((pair) => {

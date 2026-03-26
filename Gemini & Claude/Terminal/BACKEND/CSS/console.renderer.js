@@ -276,6 +276,9 @@
       // Merge with defaults
       this._settings = { ...CONFIG_DEFAULTS, ...this.config };
 
+      // Mutable prompt symbol — updated after login/logout
+      this._promptSymbol = config.promptSymbol ?? "$ ";
+
       // Active theme
       this._activeTheme = this._resolveTheme(config.theme ?? "dark");
 
@@ -927,7 +930,7 @@
 
       const prompt = this._el("span", {
         className: "wc-prompt",
-        textContent: this.config.promptSymbol ?? "$ ",
+        textContent: this._promptSymbol,
         ariaHidden: "true",
       });
       prompt.style.color = this._activeTheme.prompt;

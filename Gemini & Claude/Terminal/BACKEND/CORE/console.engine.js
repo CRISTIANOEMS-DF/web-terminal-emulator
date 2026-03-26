@@ -27,8 +27,8 @@
   // Logger with Full Tracking
   // ─────────────────────────────────────────────────────────────────────────
   class _Logger {
-    constructor(debug = false) {
-      this.debug = debug;
+    constructor(debugMode = false) {
+      this.debugMode = debugMode;
       this.logs = [];
       this.maxLogs = 1000;
     }
@@ -66,7 +66,7 @@
     }
 
     debug(msg, data) {
-      if (this.debug) {
+      if (this.debugMode) {
         this._store("DEBUG", msg, data);
         console.log(
           `%c[ConsoleEngine] 🐛 ${msg}`,
@@ -163,6 +163,8 @@
       // State
       this._historyIndex = -1;
       this._disposed = false;
+      this._loginState = null;
+      this._phpSessionActive = false;
       this._executionStats = {
         total: 0,
         successful: 0,
@@ -216,7 +218,7 @@
      * The main execution loop. Takes a raw string, finds the command, and runs it.
      * @param {string} rawInput
      */
-    execute(rawInput) {
+    async execute(rawInput) {
       if (this._disposed) return { success: false, error: "Engine disposed" };
       if (typeof rawInput !== "string")
         return { success: false, error: "Invalid input" };
@@ -277,7 +279,7 @@
               parser: this._parser,
             };
 
-            commandDef.action(args, this._renderer, this, apiContext);
+            await commandDef.action(args, this._renderer, this, apiContext);
 
             this._executionStats.successful++;
             this._executionStats.total++;
@@ -630,6 +632,18 @@
       this._logger.info("Disposed");
     }
 
+    // ── Private: Update prompt symbol ────────────────────────────────────────
+
+    _updatePrompt(username) {
+      // Update the mutable prompt symbol so every new input line uses it
+      const symbol = username ? `${username}@terminal:~$ ` : "user@machine:~$ ";
+      if (this._renderer) {
+        this._renderer._promptSymbol = symbol;
+        const promptEl = this._renderer._root?.querySelector(".wc-prompt");
+        if (promptEl) promptEl.textContent = symbol;
+      }
+    }
+
     // ── Private: History Management ─────────────────────────────────────────
 
     _addToHistory(cmd) {
@@ -650,6 +664,14 @@
         return this._renderer.print("❌ Database not available.", "error");
       }
 
+      if (!this._loginState) {
+        this._loginState = null;
+        return this._renderer.print(
+          "❌ Login state corrupted. Please try again.",
+          "error",
+        );
+      }
+
       const state = this._loginState;
 
       if (state.step === "username") {
@@ -666,7 +688,10 @@
 
         const result = this._database.authenticate(username, password);
         if (result.success) {
-          this._database._internalToken = result.token;
+          if (typeof this._database.setAuthenticated === "function") {
+            this._database.setAuthenticated(result.token, true);
+          }
+          this._updatePrompt(username);
           this._renderer.print(`✓ Login successful as ${username}`, "success");
           if (result.user && result.user.role === "admin") {
             this._renderer.print("🔑 Admin privileges granted", "info");
@@ -779,42 +804,260 @@
       });
 
       registry.set("loadphp", {
-        description: "Load data from PHP export file.",
+        description: "Load data from PHP export file. Requires login.",
         category: "database",
         action: async (args, renderer, engine) => {
-          try {
-            // Tentar carregar dados do PHP via fetch
-            const response = await fetch(
-              "./BACKEND/DATABASE/database_export.php?api=1&action=load",
-            );
-            if (!response.ok) {
-              throw new Error(`HTTP ${response.status}`);
-            }
-            const phpData = await response.json();
-
-            renderer.print("✓ PHP data loaded successfully", "success");
-            renderer.print(`📊 Users: ${phpData.data.users.length}`, "info");
-            renderer.print(`⚙️ Version: ${phpData.config.version}`, "info");
-            renderer.print(`📅 Exported: ${phpData.data.exported_at}`, "info");
-
-            // Armazenar dados carregados no engine para uso posterior
-            engine._phpData = phpData;
-          } catch (error) {
+          if (
+            window.location.port === "5500" ||
+            window.location.port === "5501"
+          ) {
             renderer.print(
-              `❌ Failed to load PHP data: ${error.message}`,
+              "❌ You are on Live Server (port " +
+                window.location.port +
+                "), which cannot run PHP.",
               "error",
             );
             renderer.print(
-              "💡 Make sure the PHP file is accessible and web server is running",
+              "💡 Start the PHP server: php -S localhost:8000",
+              "info",
+            );
+            renderer.print(
+              "💡 Then open: http://localhost:8000/FRONTEND/terminal.html",
+              "info",
+            );
+            return;
+          }
+
+          const isAuthenticated =
+            engine._database &&
+            (typeof engine._database.isAuthenticated === "function"
+              ? engine._database.isAuthenticated()
+              : engine._database._isAuthenticated);
+
+          if (!isAuthenticated) {
+            return renderer.print(
+              "❌ Authentication required. Please login first.",
+              "error",
+            );
+          }
+
+          // Same origin as the page — no hardcoded port
+          const url = `${window.location.origin}/BACKEND/DATABASE/database_export.php?api=1&action=load`;
+
+          try {
+            const response = await fetch(url, {
+              method: "GET",
+              credentials: "include",
+            });
+
+            if (response.status === 401) {
+              renderer.print("❌ PHP session expired or not found.", "error");
+              renderer.print(
+                "💡 Run 'loginphp <username> <password>' first.",
+                "info",
+              );
+              return;
+            }
+
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+            const text = await response.text();
+            if (text.trimStart().startsWith("<?php")) {
+              throw new Error(
+                "Server returned raw PHP — PHP is not being executed",
+              );
+            }
+
+            const phpData = JSON.parse(text);
+
+            renderer.print(`✓ PHP data loaded from ${url}`, "success");
+            renderer.print(`📊 Users: ${phpData.data.users.length}`, "info");
+            renderer.print(`⚙️  Version: ${phpData.config.version}`, "info");
+            renderer.print(`📅 Exported: ${phpData.data.exported_at}`, "info");
+            renderer.print(
+              `🗄️  DB Status: ${phpData.status.database_status}`,
+              "info",
+            );
+
+            engine._phpData = phpData;
+          } catch (e) {
+            renderer.print(`❌ Failed to load PHP data: ${e.message}`, "error");
+            renderer.print(
+              `💡 Make sure PHP is running on ${window.location.origin}`,
               "info",
             );
           }
         },
       });
 
-      // ───────────────────────────────────────────────────────────────────
-      // NEW & REFACTORED DATABASE COMMANDS
-      // ───────────────────────────────────────────────────────────────────
+      registry.set("loginphp", {
+        description: "Authenticate on the PHP server and sync JS session.",
+        category: "database",
+        action: async (args, renderer, engine) => {
+          if (
+            window.location.port === "5500" ||
+            window.location.port === "5501"
+          ) {
+            renderer.print(
+              "❌ You are on Live Server (port " +
+                window.location.port +
+                "), which cannot run PHP.",
+              "error",
+            );
+            renderer.print(
+              "💡 Start the PHP server: php -S localhost:8000",
+              "info",
+            );
+            renderer.print(
+              "💡 Then open: http://localhost:8000/FRONTEND/terminal.html",
+              "info",
+            );
+            return;
+          }
+
+          if (args.length < 2) {
+            return renderer.print(
+              "Usage: loginphp <username> <password>",
+              "error",
+            );
+          }
+
+          const username = args[0].trim();
+          const password = args[1].trim();
+
+          if (!username || !password) {
+            return renderer.print(
+              "❌ Username and password cannot be empty.",
+              "error",
+            );
+          }
+
+          const phpBase = `${window.location.origin}/BACKEND/DATABASE/database_export.php`;
+
+          try {
+            const response = await fetch(`${phpBase}?api=1`, {
+              method: "POST",
+              credentials: "include",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "login", username, password }),
+            });
+
+            if (!response.ok && response.status !== 401) {
+              throw new Error(`HTTP ${response.status}`);
+            }
+
+            const data = await response.json();
+            if (data.success) {
+              renderer.print(
+                `✓ PHP session authenticated as ${data.user.username}`,
+                "success",
+              );
+
+              // Sync JS database auth so all commands work without a separate 'login'
+              if (engine._database) {
+                const jsResult = engine._database.authenticate(username, password);
+                if (jsResult.success) {
+                  engine._database._internalToken   = jsResult.token;
+                  engine._database._isAuthenticated = true;
+                } else {
+                  // PHP already validated — force-activate JS auth
+                  engine._database._isAuthenticated = true;
+                }
+              }
+              engine._phpSessionActive = true;
+
+              if (data.user.role === "admin") {
+                renderer.print("🔑 Admin privileges granted", "info");
+              }
+            } else {
+              renderer.print(
+                `❌ PHP login failed: ${data.message || "Invalid credentials"}`,
+                "error",
+              );
+            }
+          } catch (e) {
+            renderer.print(`❌ PHP server unreachable: ${e.message}`, "error");
+            renderer.print(
+              `💡 Make sure PHP is running on ${window.location.origin}`,
+              "info",
+            );
+          }
+        },
+      });
+
+      registry.set("new", {
+        description: "Create a new random user, save to database and generate a personal terminal link.",
+        category: "database",
+        action: (args, renderer, engine) => {
+          if (!engine._database)
+            return renderer.print("❌ Database not available.", "error");
+
+          // Must be admin to create users
+          const isAuthenticated =
+            typeof engine._database.isAuthenticated === "function"
+              ? engine._database.isAuthenticated()
+              : engine._database._isAuthenticated;
+
+          if (!isAuthenticated)
+            return renderer.print("❌ Authentication required. Please login first.", "error");
+
+          // Generate random credentials
+          const adjectives = ["swift", "bold", "calm", "dark", "epic", "fast", "gold", "iron", "jade", "keen"];
+          const nouns      = ["wolf", "hawk", "bear", "lion", "fox", "owl", "crow", "lynx", "puma", "stag"];
+          const randAdj    = adjectives[Math.floor(Math.random() * adjectives.length)];
+          const randNoun   = nouns[Math.floor(Math.random() * nouns.length)];
+          const randNum    = Math.floor(Math.random() * 9000 + 1000);
+          const username   = `${randAdj}_${randNoun}_${randNum}`;
+          const password   = Math.random().toString(36).slice(2, 10) +
+                             Math.random().toString(36).slice(2, 6).toUpperCase();
+
+          // Ensure _link_users table exists
+          const token = engine._database._internalToken;
+          if (!engine._database.tables._link_users) {
+            engine._database.tables._link_users = {
+              columns: ["id", "username", "password", "link", "created_at", "active"],
+              rows:    [],
+              indexes: {},
+            };
+            engine._database._nextIds._link_users = 1;
+          }
+
+          // Save user to _link_users table
+          const userId  = engine._database._nextIds._link_users++;
+          const origin  = window.location.origin;
+          const link    = `${origin}/FRONTEND/terminal.html?user=${encodeURIComponent(username)}&session=${userId}`;
+
+          engine._database.tables._link_users.rows.push({
+            id:         userId,
+            username,
+            password,
+            link,
+            created_at: new Date().toISOString(),
+            active:     false,
+          });
+          engine._database._saveToStorage();
+
+          // Also register in the JS _users table so they can login
+          const hash = engine._database._hashString(password);
+          if (!engine._database.tables._users) {
+            engine._database._initializeUsersTable();
+          }
+          engine._database.tables._users.rows.push({
+            id:           engine._database._nextIds._users++,
+            username,
+            password_hash: hash,
+            role:          "user",
+            created_at:    new Date().toISOString(),
+          });
+          engine._database._saveToStorage();
+
+          renderer.print("✓ New user created!", "success");
+          renderer.print(`👤 Username : ${username}`, "info");
+          renderer.print(`🔑 Password : ${password}`, "info");
+          renderer.print(`🔗 Link     : ${link}`, "info");
+          renderer.print("💡 Share the link and credentials with the user.", "muted");
+        },
+      });
 
       registry.set("login", {
         description: "Authenticate to the database with username and password.",
@@ -843,7 +1086,10 @@
 
             const result = engine._database.authenticate(username, password);
             if (result.success) {
-              engine._database._internalToken = result.token;
+              if (typeof engine._database.setAuthenticated === "function") {
+                engine._database.setAuthenticated(result.token, true);
+              }
+              engine._updatePrompt(username);
               renderer.print(`✓ Login successful as ${username}`, "success");
               if (result.user && result.user.role === "admin") {
                 renderer.print("🔑 Admin privileges granted", "info");
@@ -867,11 +1113,15 @@
         action: (args, renderer, engine) => {
           if (!engine._database)
             return renderer.print("❌ Database not available.", "error");
-          const token = engine._database._internalToken;
+
+          const token = typeof engine._database.getToken === "function"
+            ? engine._database.getToken()
+            : engine._database._internalToken;
+
           if (token) {
             engine._database.revokeToken(token);
-            engine._database._internalToken = null;
-            engine._database._isAuthenticated = false;
+            engine._database.setAuthenticated(null, false);
+            engine._updatePrompt(null);
             renderer.print("✓ Logged out successfully.", "success");
           } else {
             renderer.print("Not logged in.", "warn");
@@ -886,9 +1136,17 @@
           if (!engine._database)
             return renderer.print("❌ Database not available.", "error");
           const newPassword = args[0];
-          const token = engine._database._internalToken;
 
-          if (!token || !engine._database.isValidToken(token)) {
+          let token = null;
+          if (typeof engine._database.getToken === "function") {
+            token = engine._database.getToken();
+          }
+
+          if (
+            !token ||
+            (typeof engine._database.isValidToken === "function" &&
+              !engine._database.isValidToken(token))
+          ) {
             return renderer.print(
               "❌ Authentication required. Please login first.",
               "error",
@@ -913,8 +1171,16 @@
         action: (args, renderer, engine) => {
           if (!engine._database)
             return renderer.print("❌ Database not available.", "error");
-          const token = engine._database._internalToken;
-          if (!token || !engine._database.isValidToken(token)) {
+
+          let token = null;
+          if (typeof engine._database.getToken === "function") {
+            token = engine._database.getToken();
+          }
+          if (
+            !token ||
+            (typeof engine._database.isValidToken === "function" &&
+              !engine._database.isValidToken(token))
+          ) {
             return renderer.print(
               "❌ Authentication required. Please login first.",
               "error",
@@ -949,8 +1215,16 @@
         action: (args, renderer, engine) => {
           if (!engine._database)
             return renderer.print("❌ Database not available.", "error");
-          const token = engine._database._internalToken;
-          if (!token || !engine._database.isValidToken(token)) {
+
+          let token = null;
+          if (typeof engine._database.getToken === "function") {
+            token = engine._database.getToken();
+          }
+          if (
+            !token ||
+            (typeof engine._database.isValidToken === "function" &&
+              !engine._database.isValidToken(token))
+          ) {
             return renderer.print(
               "❌ Authentication required. Please login first.",
               "error",
@@ -1003,7 +1277,12 @@
           if (!engine._database)
             return renderer.print("❌ Database not available.", "error");
           // Basic auth check
-          if (!engine._database._isAuthenticated) {
+          const isAuthenticated =
+            typeof engine._database.isAuthenticated === "function"
+              ? engine._database.isAuthenticated()
+              : engine._database._isAuthenticated;
+
+          if (!isAuthenticated) {
             return renderer.print(
               "❌ Authentication required for select.",
               "error",
@@ -1031,8 +1310,16 @@
         action: (args, renderer, engine) => {
           if (!engine._database)
             return renderer.print("❌ Database not available.", "error");
-          const token = engine._database._internalToken;
-          if (!token || !engine._database.isValidToken(token)) {
+
+          let token = null;
+          if (typeof engine._database.getToken === "function") {
+            token = engine._database.getToken();
+          }
+          if (
+            !token ||
+            (typeof engine._database.isValidToken === "function" &&
+              !engine._database.isValidToken(token))
+          ) {
             return renderer.print(
               "❌ Authentication required. Please login first.",
               "error",
@@ -1093,7 +1380,13 @@
         action: (args, renderer, engine) => {
           if (!engine._database)
             return renderer.print("❌ Database not available.", "error");
-          if (!engine._database._isAuthenticated) {
+
+          const isAuthenticated =
+            typeof engine._database.isAuthenticated === "function"
+              ? engine._database.isAuthenticated()
+              : engine._database._isAuthenticated;
+
+          if (!isAuthenticated) {
             return renderer.print("❌ Authentication required.", "error");
           }
           if (args.length === 0)
@@ -1102,14 +1395,17 @@
           const tableName = args[0];
           const result = engine._database.describe(tableName);
 
-          if (result.error) {
-            renderer.print(`Error: ${result.error}`, "error");
+          if (!result.success) {
+            renderer.print(`Error: ${result.message}`, "error");
           } else {
+            const rowCount = engine._database.tables[tableName]
+              ? engine._database.tables[tableName].rows.length
+              : 0;
             renderer.print(
-              `Table: ${result.TABLE_NAME} (${result.ROWS_COUNT} rows)`,
+              `Table: ${result.tableName} (${rowCount} rows)`,
               "info",
             );
-            renderer.renderTable(result.COLUMNS);
+            renderer.renderTable(result.columns);
           }
         },
       });

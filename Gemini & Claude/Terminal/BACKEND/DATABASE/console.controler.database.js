@@ -57,23 +57,12 @@
     // Session & Auth Management
     // ─────────────────────────────────────────────────────────────────────────
 
-    login(username, password = null) {
+    login(username, password) {
       this._assertDb();
-
-      // Se só passou username, assume que é o método antigo (password)
-      if (password === null) {
-        // Método antigo: login(password) - manter compatibilidade
-        const result = this._db.authenticate(username); // username é na verdade password
-        if (result.success) {
-          this._sessionToken = result.token;
-        }
-        return result;
-      }
-
-      // Novo método: login(username, password)
       const result = this._db.authenticate(username, password);
       if (result.success) {
         this._sessionToken = result.token;
+        this._currentUser  = result.user;
       }
       return result;
     }
